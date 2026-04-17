@@ -92,7 +92,11 @@
                             {% for record in recent %}
                             <tr>
                                 <td>
-                                    <span class="staff-badge">{{ record['staff_name'] }}</span>
+                                    {% if record['staff_name'] %}
+                                        <span class="staff-badge">{{ record['staff_name'] }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">External Lab Expense</span>
+                                    {% endif %}
                                 </td>
                                 <td class="text-muted">{{ record['record_date'] }}</td>
                                 <td class="text-end">

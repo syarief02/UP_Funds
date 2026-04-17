@@ -65,7 +65,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS cash_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            staff_id INTEGER NOT NULL,
+            staff_id INTEGER,
             record_date DATE NOT NULL,
             amount_in REAL DEFAULT 0.00,
             amount_out REAL DEFAULT 0.00,

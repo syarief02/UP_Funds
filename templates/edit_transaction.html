@@ -27,10 +27,10 @@
                     <!-- Staff Selection -->
                     <div class="mb-3">
                         <label for="staff_id" class="form-label fw-medium">
-                            Staff Name <span class="text-danger">*</span>
+                            Staff Name <span class="text-muted fw-normal small">(Optional for Lab Expenses)</span>
                         </label>
-                        <select class="form-select" id="staff_id" name="staff_id" required>
-                            <option value="">-- Select Staff --</option>
+                        <select class="form-select" id="staff_id" name="staff_id">
+                            <option value="">-- External Lab Expense --</option>
                             {% for s in staff_list %}
                                 <option value="{{ s['id'] }}" {% if s['id'] == record['staff_id'] %}selected{% endif %}>
                                     {{ s['name'] }}

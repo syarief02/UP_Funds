@@ -116,7 +116,11 @@
                     <tr>
                         <td class="text-muted">#{{ record['id'] }}</td>
                         <td>
-                            <span class="staff-badge">{{ record['staff_name'] }}</span>
+                            {% if record['staff_name'] %}
+                                <span class="staff-badge">{{ record['staff_name'] }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">External Lab Expense</span>
+                            {% endif %}
                         </td>
                         <td>{{ record['record_date'] }}</td>
                         <td class="text-end">

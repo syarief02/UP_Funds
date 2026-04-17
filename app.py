@@ -112,7 +112,7 @@ def dashboard():
     recent = conn.execute('''
         SELECT cr.*, s.name as staff_name
         FROM cash_records cr
-        JOIN staff s ON cr.staff_id = s.id
+        LEFT JOIN staff s ON cr.staff_id = s.id
         ORDER BY cr.record_date DESC, cr.id DESC
         LIMIT 5
     ''').fetchall()
@@ -159,7 +159,7 @@ def transactions():
     query = '''
         SELECT cr.*, s.name as staff_name
         FROM cash_records cr
-        JOIN staff s ON cr.staff_id = s.id
+        LEFT JOIN staff s ON cr.staff_id = s.id
         WHERE 1=1
     '''
     params = []
@@ -226,7 +226,11 @@ def add_transaction():
         errors = []
 
         if not staff_id:
-            errors.append('Staff name is required.')
+            # Only allow empty staff_id for shared external expenses
+            if expense_type == 'shared' and (not amount_in or float(amount_in) == 0.0):
+                staff_id = None
+            else:
+                errors.append('Staff name is required for income or personal refunds.')
 
         if not record_date:
             errors.append('Date is required.')
@@ -329,7 +333,10 @@ def edit_transaction(id):
         errors = []
 
         if not staff_id:
-            errors.append('Staff name is required.')
+            if expense_type == 'shared' and (not amount_in or float(amount_in) == 0.0):
+                staff_id = None
+            else:
+                errors.append('Staff name is required for income or personal refunds.')
 
         if not record_date:
             errors.append('Date is required.')
@@ -725,7 +732,7 @@ def export_csv():
         SELECT cr.id, s.name as staff_name, cr.record_date,
                cr.amount_in, cr.amount_out, cr.expense_type, cr.note
         FROM cash_records cr
-        JOIN staff s ON cr.staff_id = s.id
+        LEFT JOIN staff s ON cr.staff_id = s.id
         ORDER BY cr.record_date DESC, cr.id DESC
     ''').fetchall()
 
