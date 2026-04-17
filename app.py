@@ -277,21 +277,20 @@ def add_transaction():
         
         # If it's a shared expense, record the permanent splits NOW
         if amount_out > 0 and expense_type == 'shared':
-            active_staff = conn.execute('''
-                SELECT s.id, COALESCE(SUM(cr.amount_in), 0) as total_in
-                FROM staff s
-                LEFT JOIN cash_records cr ON s.id = cr.staff_id
-                WHERE s.is_active = 1
-                GROUP BY s.id
-            ''').fetchall()
+            active_staff = conn.execute('SELECT id FROM staff WHERE is_active = 1').fetchall()
             
-            active_total_in = sum(s['total_in'] for s in active_staff)
-            
-            for s in active_staff:
-                if active_total_in > 0:
-                    split_amount = amount_out * (s['total_in'] / active_total_in)
+            count = len(active_staff)
+            if count > 0:
+                split_amount = round(amount_out / count, 2)
+                total_distributed = 0
+                for i, s in enumerate(active_staff):
+                    if i == count - 1:
+                        amount = round(amount_out - total_distributed, 2)
+                    else:
+                        amount = split_amount
+                        total_distributed += amount
                     conn.execute('INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)', 
-                                 (transaction_id, s['id'], split_amount))
+                                 (transaction_id, s['id'], amount))
 
         conn.commit()
         conn.close()
@@ -385,21 +384,20 @@ def edit_transaction(id):
         
         # Recalculate if it's currently a shared expense
         if amount_out > 0 and expense_type == 'shared':
-            active_staff = conn.execute('''
-                SELECT s.id, COALESCE(SUM(cr.amount_in), 0) as total_in
-                FROM staff s
-                LEFT JOIN cash_records cr ON s.id = cr.staff_id
-                WHERE s.is_active = 1
-                GROUP BY s.id
-            ''').fetchall()
+            active_staff = conn.execute('SELECT id FROM staff WHERE is_active = 1').fetchall()
             
-            active_total_in = sum(s['total_in'] for s in active_staff)
-            
-            for s in active_staff:
-                if active_total_in > 0:
-                    split_amount = amount_out * (s['total_in'] / active_total_in)
+            count = len(active_staff)
+            if count > 0:
+                split_amount = round(amount_out / count, 2)
+                total_distributed = 0
+                for i, s in enumerate(active_staff):
+                    if i == count - 1:
+                        amount = round(amount_out - total_distributed, 2)
+                    else:
+                        amount = split_amount
+                        total_distributed += amount
                     conn.execute('INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)', 
-                                 (id, s['id'], split_amount))
+                                 (id, s['id'], amount))
 
         conn.commit()
         conn.close()
