@@ -1,0 +1,191 @@
+<!--
+  dashboard.html - Dashboard / Homepage
+  ======================================
+  Shows summary cards (Total In, Total Out, Balance, Staff Count)
+  and recent transactions + monthly summary.
+-->
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}
+    <i class="bi bi-speedometer2 me-2"></i>Dashboard
+{% endblock %}
+
+{% block content %}
+<!-- Summary Cards Row -->
+<div class="row g-3 mb-4">
+    <!-- Total Amount In -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="summary-card card-green">
+            <div class="card-icon">
+                <i class="bi bi-arrow-down-circle"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label">Total Amount In</p>
+                <h3 class="card-value">RM {{ "%.2f"|format(total_in) }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Amount Out -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="summary-card card-red">
+            <div class="card-icon">
+                <i class="bi bi-arrow-up-circle"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label">Total Amount Out</p>
+                <h3 class="card-value">RM {{ "%.2f"|format(total_out) }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Balance -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="summary-card card-blue">
+            <div class="card-icon">
+                <i class="bi bi-wallet2"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label">Current Balance</p>
+                <h3 class="card-value">RM {{ "%.2f"|format(balance) }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Staff -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="summary-card card-purple">
+            <div class="card-icon">
+                <i class="bi bi-people"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label">Total Staff</p>
+                <h3 class="card-value">{{ staff_count }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Recent Transactions -->
+    <div class="col-lg-7">
+        <div class="card content-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Transactions</h6>
+                <a href="{{ url_for('transactions') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Staff</th>
+                                <th>Date</th>
+                                <th class="text-end">In</th>
+                                <th class="text-end">Out</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in recent %}
+                            <tr>
+                                <td>
+                                    <span class="staff-badge">{{ record['staff_name'] }}</span>
+                                </td>
+                                <td class="text-muted">{{ record['record_date'] }}</td>
+                                <td class="text-end">
+                                    {% if record['amount_in'] > 0 %}
+                                        <span class="amount-in">+RM {{ "%.2f"|format(record['amount_in']) }}</span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if record['amount_out'] > 0 %}
+                                        <span class="amount-out">-RM {{ "%.2f"|format(record['amount_out']) }}</span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ record['note'][:30] }}{{ '...' if record['note']|length > 30 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <p>No transactions yet</p>
+                    <a href="{{ url_for('add_transaction') }}" class="btn btn-primary btn-sm">Add First Transaction</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Summary -->
+    <div class="col-lg-5">
+        <div class="card content-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-calendar-month me-2"></i>Monthly Summary ({{ now.strftime('%Y') if now else '2026' }})</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if monthly %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th class="text-end">In</th>
+                                <th class="text-end">Out</th>
+                                <th class="text-end">Net</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in monthly %}
+                            <tr>
+                                <td class="fw-medium">{{ row['month'] }}</td>
+                                <td class="text-end amount-in">RM {{ "%.2f"|format(row['total_in']) }}</td>
+                                <td class="text-end amount-out">RM {{ "%.2f"|format(row['total_out']) }}</td>
+                                <td class="text-end fw-semibold">RM {{ "%.2f"|format(row['total_in'] - row['total_out']) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-calendar-x"></i>
+                    <p>No data for this year</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card content-card">
+            <div class="card-body text-center py-3">
+                <span class="text-muted me-4">
+                    <i class="bi bi-receipt me-1"></i>
+                    <strong>{{ transaction_count }}</strong> Total Transactions
+                </span>
+                <span class="text-muted me-4">
+                    <i class="bi bi-people me-1"></i>
+                    <strong>{{ staff_count }}</strong> Staff Members
+                </span>
+                <span class="text-muted">
+                    <i class="bi bi-wallet2 me-1"></i>
+                    Balance: <strong>RM {{ "%.2f"|format(balance) }}</strong>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

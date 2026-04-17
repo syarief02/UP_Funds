@@ -1,0 +1,217 @@
+<!--
+  add_transaction.html - Add New Transaction Form
+  ================================================
+  Form with:
+  - Searchable staff dropdown + "Add New Staff" button
+  - Date picker (defaults to today)
+  - Amount In / Amount Out
+  - Note field
+  - Validation feedback
+-->
+{% extends 'base.html' %}
+
+{% block title %}Add Transaction{% endblock %}
+{% block page_title %}
+    <i class="bi bi-plus-circle me-2"></i>Add Transaction
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card content-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-plus-circle me-2"></i>New Transaction</h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_transaction') }}" id="transactionForm">
+
+                    <!-- Staff Selection -->
+                    <div class="mb-3">
+                        <label for="staff_id" class="form-label fw-medium">
+                            Staff Name <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <select class="form-select" id="staff_id" name="staff_id" required>
+                                <option value="">-- Select Staff --</option>
+                                {% for s in staff_list %}
+                                    <option value="{{ s['id'] }}">{{ s['name'] }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addStaffModal">
+                                <i class="bi bi-person-plus me-1"></i> New Staff
+                            </button>
+                        </div>
+                        <!-- Search hint -->
+                        <div class="form-text">
+                            <i class="bi bi-search me-1"></i>Type to search in the dropdown, or click "New Staff" to add.
+                        </div>
+                    </div>
+
+                    <!-- Date -->
+                    <div class="mb-3">
+                        <label for="record_date" class="form-label fw-medium">
+                            Date <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" class="form-control" id="record_date" name="record_date"
+                               value="{{ today }}" required>
+                    </div>
+
+                    <!-- Amount In / Amount Out (side by side) -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="amount_in" class="form-label fw-medium">
+                                <i class="bi bi-arrow-down-circle text-success me-1"></i>Amount In (RM)
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" id="amount_in" name="amount_in"
+                                       step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="amount_out" class="form-label fw-medium">
+                                <i class="bi bi-arrow-up-circle text-danger me-1"></i>Amount Out (RM)
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" id="amount_out" name="amount_out"
+                                       step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Amount validation hint -->
+                    <div id="amountHint" class="form-text text-danger mb-3" style="display: none;">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Only one of Amount In or Amount Out should have a value.
+                    </div>
+
+                    <!-- Note -->
+                    <div class="mb-4">
+                        <label for="note" class="form-label fw-medium">
+                            <i class="bi bi-sticky me-1"></i>Note / Description
+                        </label>
+                        <textarea class="form-control" id="note" name="note" rows="3"
+                                  placeholder="e.g. Monthly contribution, office supplies, etc."></textarea>
+                    </div>
+
+                    <!-- Submit Buttons -->
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-check-lg me-1"></i> Save Transaction
+                        </button>
+                        <a href="{{ url_for('transactions') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg me-1"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Staff Modal (used to quickly add a new staff from this form) -->
+<div class="modal fade" id="addStaffModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-person-plus me-2"></i>Add New Staff
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="newStaffName" class="form-label fw-medium">Staff Name</label>
+                    <input type="text" class="form-control" id="newStaffName"
+                           placeholder="Enter staff name" autofocus>
+                </div>
+                <div id="staffModalFeedback"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveNewStaff">
+                    <i class="bi bi-check-lg me-1"></i> Add Staff
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Handle adding new staff via AJAX modal
+    document.getElementById('saveNewStaff').addEventListener('click', function() {
+        const nameInput = document.getElementById('newStaffName');
+        const feedback = document.getElementById('staffModalFeedback');
+        const name = nameInput.value.trim();
+
+        if (!name) {
+            feedback.innerHTML = '<div class="alert alert-danger py-2">Please enter a staff name.</div>';
+            return;
+        }
+
+        // Send AJAX request to add staff
+        fetch('{{ url_for("add_staff_ajax") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Add new option to the dropdown
+                const select = document.getElementById('staff_id');
+                const option = new Option(data.staff.name, data.staff.id, true, true);
+                select.appendChild(option);
+
+                // Sort options alphabetically (keep first "Select" option)
+                const options = Array.from(select.options).slice(1);
+                options.sort((a, b) => a.text.localeCompare(b.text));
+                while (select.options.length > 1) select.remove(1);
+                options.forEach(opt => select.appendChild(opt));
+
+                // Select the new staff
+                select.value = data.staff.id;
+
+                feedback.innerHTML = `<div class="alert alert-success py-2">${data.message}</div>`;
+
+                // Close modal after short delay
+                setTimeout(() => {
+                    bootstrap.Modal.getInstance(document.getElementById('addStaffModal')).hide();
+                    nameInput.value = '';
+                    feedback.innerHTML = '';
+                }, 1000);
+            } else {
+                feedback.innerHTML = `<div class="alert alert-danger py-2">${data.message}</div>`;
+            }
+        })
+        .catch(err => {
+            feedback.innerHTML = '<div class="alert alert-danger py-2">Error adding staff. Please try again.</div>';
+        });
+    });
+
+    // Enter key in modal input triggers save
+    document.getElementById('newStaffName').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('saveNewStaff').click();
+        }
+    });
+
+    // Client-side validation: warn when both amounts have values
+    const amountIn = document.getElementById('amount_in');
+    const amountOut = document.getElementById('amount_out');
+    const amountHint = document.getElementById('amountHint');
+
+    function checkAmounts() {
+        const inVal = parseFloat(amountIn.value) || 0;
+        const outVal = parseFloat(amountOut.value) || 0;
+        amountHint.style.display = (inVal > 0 && outVal > 0) ? 'block' : 'none';
+    }
+
+    amountIn.addEventListener('input', checkAmounts);
+    amountOut.addEventListener('input', checkAmounts);
+</script>
+{% endblock %}

@@ -1,0 +1,124 @@
+<!--
+  edit_transaction.html - Edit Existing Transaction
+  ==================================================
+  Pre-filled form for editing a transaction.
+  Same layout as add_transaction but with existing values loaded.
+-->
+{% extends 'base.html' %}
+
+{% block title %}Edit Transaction{% endblock %}
+{% block page_title %}
+    <i class="bi bi-pencil-square me-2"></i>Edit Transaction #{{ record['id'] }}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card content-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-pencil-square me-2"></i>Edit Transaction #{{ record['id'] }}</h6>
+                <a href="{{ url_for('transactions') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> Back
+                </a>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('edit_transaction', id=record['id']) }}" id="editTransactionForm">
+
+                    <!-- Staff Selection -->
+                    <div class="mb-3">
+                        <label for="staff_id" class="form-label fw-medium">
+                            Staff Name <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="staff_id" name="staff_id" required>
+                            <option value="">-- Select Staff --</option>
+                            {% for s in staff_list %}
+                                <option value="{{ s['id'] }}" {% if s['id'] == record['staff_id'] %}selected{% endif %}>
+                                    {{ s['name'] }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Date -->
+                    <div class="mb-3">
+                        <label for="record_date" class="form-label fw-medium">
+                            Date <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" class="form-control" id="record_date" name="record_date"
+                               value="{{ record['record_date'] }}" required>
+                    </div>
+
+                    <!-- Amount In / Amount Out -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="amount_in" class="form-label fw-medium">
+                                <i class="bi bi-arrow-down-circle text-success me-1"></i>Amount In (RM)
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" id="amount_in" name="amount_in"
+                                       step="0.01" min="0" value="{{ '%.2f'|format(record['amount_in']) }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="amount_out" class="form-label fw-medium">
+                                <i class="bi bi-arrow-up-circle text-danger me-1"></i>Amount Out (RM)
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">RM</span>
+                                <input type="number" class="form-control" id="amount_out" name="amount_out"
+                                       step="0.01" min="0" value="{{ '%.2f'|format(record['amount_out']) }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Amount validation hint -->
+                    <div id="amountHint" class="form-text text-danger mb-3" style="display: none;">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Only one of Amount In or Amount Out should have a value.
+                    </div>
+
+                    <!-- Note -->
+                    <div class="mb-4">
+                        <label for="note" class="form-label fw-medium">
+                            <i class="bi bi-sticky me-1"></i>Note / Description
+                        </label>
+                        <textarea class="form-control" id="note" name="note" rows="3">{{ record['note'] }}</textarea>
+                    </div>
+
+                    <!-- Submit Buttons -->
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-check-lg me-1"></i> Update Transaction
+                        </button>
+                        <a href="{{ url_for('transactions') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg me-1"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Client-side validation: warn when both amounts have values
+    const amountIn = document.getElementById('amount_in');
+    const amountOut = document.getElementById('amount_out');
+    const amountHint = document.getElementById('amountHint');
+
+    function checkAmounts() {
+        const inVal = parseFloat(amountIn.value) || 0;
+        const outVal = parseFloat(amountOut.value) || 0;
+        amountHint.style.display = (inVal > 0 && outVal > 0) ? 'block' : 'none';
+    }
+
+    amountIn.addEventListener('input', checkAmounts);
+    amountOut.addEventListener('input', checkAmounts);
+
+    // Check on page load in case both have values
+    checkAmounts();
+</script>
+{% endblock %}

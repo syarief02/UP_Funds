@@ -1,0 +1,5 @@
+# Flask web framework
+Flask==3.1.0
+
+# For CSV export functionality
+# (Python's built-in csv module is used, no extra dependency needed)

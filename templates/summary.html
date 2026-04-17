@@ -1,0 +1,152 @@
+<!--
+  summary.html - Staff Contribution Summary
+  ==========================================
+  Shows a table of all staff with their total
+  Amount In, Amount Out, and Net Balance.
+  Includes a search filter and grand totals footer.
+-->
+{% extends 'base.html' %}
+
+{% block title %}Staff Summary{% endblock %}
+{% block page_title %}
+    <i class="bi bi-bar-chart-line me-2"></i>Staff Contribution Summary
+{% endblock %}
+
+{% block content %}
+<!-- Search Filter -->
+<div class="card content-card mb-3">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('staff_summary') }}" class="row g-2 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label small fw-medium">Search Staff</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" name="search"
+                           placeholder="Search by staff name..." value="{{ search_query }}">
+                </div>
+            </div>
+            <div class="col-md-4 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                    <i class="bi bi-search me-1"></i>Search
+                </button>
+                <a href="{{ url_for('staff_summary') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Grand Totals Cards -->
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="summary-card card-green" style="padding: 1rem 1.25rem;">
+            <div class="card-icon" style="width:40px; height:40px; font-size:1.1rem;">
+                <i class="bi bi-arrow-down-circle"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label mb-0">Grand Total In</p>
+                <h5 class="card-value mb-0">RM {{ "%.2f"|format(grand_total_in) }}</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="summary-card card-red" style="padding: 1rem 1.25rem;">
+            <div class="card-icon" style="width:40px; height:40px; font-size:1.1rem;">
+                <i class="bi bi-arrow-up-circle"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label mb-0">Grand Total Out</p>
+                <h5 class="card-value mb-0">RM {{ "%.2f"|format(grand_total_out) }}</h5>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="summary-card card-blue" style="padding: 1rem 1.25rem;">
+            <div class="card-icon" style="width:40px; height:40px; font-size:1.1rem;">
+                <i class="bi bi-wallet2"></i>
+            </div>
+            <div class="card-info">
+                <p class="card-label mb-0">Net Balance</p>
+                <h5 class="card-value mb-0">RM {{ "%.2f"|format(grand_balance) }}</h5>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Table -->
+<div class="card content-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-table me-2"></i>Staff Breakdown</h6>
+        <span class="badge bg-primary">{{ summary|length }} staff</span>
+    </div>
+    <div class="card-body p-0">
+        {% if summary %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Staff Name</th>
+                        <th class="text-center">Transactions</th>
+                        <th class="text-end">Total In (RM)</th>
+                        <th class="text-end">Total Out (RM)</th>
+                        <th class="text-end">Net Balance (RM)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in summary %}
+                    <tr>
+                        <td class="text-muted">{{ loop.index }}</td>
+                        <td>
+                            <span class="staff-badge">{{ row['name'] }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary">{{ row['transaction_count'] }}</span>
+                        </td>
+                        <td class="text-end">
+                            {% if row['total_in'] > 0 %}
+                                <span class="amount-in">RM {{ "%.2f"|format(row['total_in']) }}</span>
+                            {% else %}
+                                <span class="text-muted">RM 0.00</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if row['total_out'] > 0 %}
+                                <span class="amount-out">RM {{ "%.2f"|format(row['total_out']) }}</span>
+                            {% else %}
+                                <span class="text-muted">RM 0.00</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <span class="fw-semibold {% if row['net_balance'] >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                RM {{ "%.2f"|format(row['net_balance']) }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-dark fw-bold">
+                        <td colspan="3" class="text-end">GRAND TOTAL</td>
+                        <td class="text-end">RM {{ "%.2f"|format(grand_total_in) }}</td>
+                        <td class="text-end">RM {{ "%.2f"|format(grand_total_out) }}</td>
+                        <td class="text-end">RM {{ "%.2f"|format(grand_balance) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-people"></i>
+            <p>No staff records found</p>
+            {% if search_query %}
+                <a href="{{ url_for('staff_summary') }}" class="btn btn-outline-primary btn-sm">Clear Search</a>
+            {% else %}
+                <a href="{{ url_for('staff_list') }}" class="btn btn-primary btn-sm">Add Staff</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
