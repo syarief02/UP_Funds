@@ -77,6 +77,18 @@ def init_db():
         )
     ''')
 
+    # Create the 'transaction_splits' table for ledger architecture
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transaction_splits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id INTEGER NOT NULL,
+            staff_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            FOREIGN KEY (transaction_id) REFERENCES cash_records(id) ON DELETE CASCADE,
+            FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
+        )
+    ''')
+
     conn.commit()
     conn.close()
     print("[DB] Database initialized successfully.")
@@ -129,11 +141,35 @@ def seed_data():
         (3, today.strftime('%Y-%m-%d'), 400.00, 0.00, 'shared', 'Monthly office contribution'),
         (1, today.strftime('%Y-%m-%d'), 0.00, 150.00, 'personal', 'Partial refund requested'),
     ]
+    # Note: Because seed_data has shared expenses, we must calculate their splits right here!
+    # Instead of complex logic here, we'll just insert them and let app.py handle new ones,
+    # but for seeding, we'll run a quick script to generate splits.
+    
+    # 1. Insert records first
     cursor.executemany(
         "INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, expense_type, note) VALUES (?, ?, ?, ?, ?, ?)",
         sample_records
     )
 
+    # 2. Generate initial splits based on final totals (acceptable for seed data)
+    # Calculate total in for everyone
+    cursor.execute("SELECT id, SUM(amount_in) as total_in FROM cash_records GROUP BY staff_id")
+    staff_totals = cursor.fetchall()
+    active_total_in = sum(row['total_in'] for row in staff_totals)
+    
+    # Get all shared expenses
+    cursor.execute("SELECT id, amount_out FROM cash_records WHERE expense_type = 'shared' AND amount_out > 0")
+    shared_expenses = cursor.fetchall()
+    
+    for expense in shared_expenses:
+        for s in staff_totals:
+            if active_total_in > 0:
+                split_amount = expense['amount_out'] * (s['total_in'] / active_total_in)
+                cursor.execute(
+                    "INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)",
+                    (expense['id'], s['id'], split_amount)
+                )
+
     conn.commit()
     conn.close()
-    print("[DB] Sample data seeded successfully.")
+    print("[DB] Sample data and splits seeded successfully.")

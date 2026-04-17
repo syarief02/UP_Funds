@@ -264,10 +264,31 @@ def add_transaction():
                                    today=date.today().strftime('%Y-%m-%d'))
 
         # Insert the transaction
-        conn.execute('''
+        cursor = conn.execute('''
             INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, expense_type, note)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (staff_id, record_date, amount_in, amount_out, expense_type, note))
+        
+        transaction_id = cursor.lastrowid
+        
+        # If it's a shared expense, record the permanent splits NOW
+        if amount_out > 0 and expense_type == 'shared':
+            active_staff = conn.execute('''
+                SELECT s.id, COALESCE(SUM(cr.amount_in), 0) as total_in
+                FROM staff s
+                LEFT JOIN cash_records cr ON s.id = cr.staff_id
+                WHERE s.is_active = 1
+                GROUP BY s.id
+            ''').fetchall()
+            
+            active_total_in = sum(s['total_in'] for s in active_staff)
+            
+            for s in active_staff:
+                if active_total_in > 0:
+                    split_amount = amount_out * (s['total_in'] / active_total_in)
+                    conn.execute('INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)', 
+                                 (transaction_id, s['id'], split_amount))
+
         conn.commit()
         conn.close()
 
@@ -351,6 +372,28 @@ def edit_transaction(id):
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ''', (staff_id, record_date, amount_in, amount_out, expense_type, note, id))
+        
+        # Clear existing splits
+        conn.execute('DELETE FROM transaction_splits WHERE transaction_id = ?', (id,))
+        
+        # Recalculate if it's currently a shared expense
+        if amount_out > 0 and expense_type == 'shared':
+            active_staff = conn.execute('''
+                SELECT s.id, COALESCE(SUM(cr.amount_in), 0) as total_in
+                FROM staff s
+                LEFT JOIN cash_records cr ON s.id = cr.staff_id
+                WHERE s.is_active = 1
+                GROUP BY s.id
+            ''').fetchall()
+            
+            active_total_in = sum(s['total_in'] for s in active_staff)
+            
+            for s in active_staff:
+                if active_total_in > 0:
+                    split_amount = amount_out * (s['total_in'] / active_total_in)
+                    conn.execute('INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)', 
+                                 (id, s['id'], split_amount))
+
         conn.commit()
         conn.close()
 
@@ -389,23 +432,24 @@ def staff_summary():
     # Calculate global grand totals first
     global_totals = conn.execute('''
         SELECT 
-            COALESCE(SUM(amount_in), 0) as total_in,
-            COALESCE(SUM(CASE WHEN expense_type = 'shared' THEN amount_out ELSE 0 END), 0) as total_shared_out,
-            COALESCE(SUM(CASE WHEN expense_type = 'personal' THEN amount_out ELSE 0 END), 0) as total_refunds
-        FROM cash_records
+            COALESCE(SUM(cr.amount_in), 0) as total_in,
+            COALESCE(SUM(CASE WHEN cr.expense_type = 'personal' THEN cr.amount_out ELSE 0 END), 0) as total_refunds
+        FROM staff s
+        LEFT JOIN cash_records cr ON s.id = cr.staff_id
+        WHERE s.is_active = 1
     ''').fetchone()
+    
+    shared_totals = conn.execute('''
+        SELECT COALESCE(SUM(ts.amount), 0) as total_shared_out
+        FROM transaction_splits ts
+        JOIN staff s ON ts.staff_id = s.id
+        WHERE s.is_active = 1
+    ''').fetchone()
+    
     grand_total_in = global_totals['total_in']
-    grand_total_out = global_totals['total_shared_out']  # Shared expenses only
+    grand_total_out = shared_totals['total_shared_out']
     grand_total_refunds = global_totals['total_refunds']
     grand_balance = grand_total_in - grand_total_out - grand_total_refunds
-
-    # calculate active_total_in for proportional shared expenses
-    active_total_in = conn.execute('''
-        SELECT COALESCE(SUM(cr.amount_in), 0) as active_total_in
-        FROM cash_records cr
-        JOIN staff s ON cr.staff_id = s.id
-        WHERE s.is_active = 1
-    ''').fetchone()['active_total_in']
 
     query = '''
         SELECT
@@ -413,6 +457,7 @@ def staff_summary():
             s.name,
             COALESCE(SUM(cr.amount_in), 0) as total_in,
             COALESCE(SUM(CASE WHEN cr.expense_type = 'personal' THEN cr.amount_out ELSE 0 END), 0) as personal_refunds,
+            (SELECT COALESCE(SUM(amount), 0) FROM transaction_splits ts WHERE ts.staff_id = s.id) as shared_expense,
             COUNT(CASE WHEN cr.amount_in > 0 THEN cr.id END) as transaction_count
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
@@ -421,27 +466,23 @@ def staff_summary():
     params = []
 
     if search_query:
-        query += ' WHERE s.name LIKE ?'
+        query += ' AND s.name LIKE ?'
         params.append(f'%{search_query}%')
 
     query += ' GROUP BY s.id, s.name ORDER BY s.name'
 
     summary_raw = conn.execute(query, params).fetchall()
 
-    # Build the final summary list with shared expenses and personal refunds
+    # Build the final summary list
     summary = []
     for row in summary_raw:
-        # Calculate shared expense based on contribution percentage from ACTIVE members
-        contribution_percentage = row['total_in'] / active_total_in if active_total_in > 0 else 0
-        shared_expense = grand_total_out * contribution_percentage
-
         summary.append({
             'name': row['name'],
             'transaction_count': row['transaction_count'],
             'total_in': row['total_in'],
             'personal_refunds': row['personal_refunds'],
-            'shared_expense': shared_expense,
-            'net_balance': row['total_in'] - shared_expense - row['personal_refunds']
+            'shared_expense': row['shared_expense'],
+            'net_balance': row['total_in'] - row['shared_expense'] - row['personal_refunds']
         })
 
     conn.close()
@@ -464,27 +505,14 @@ def staff_list():
     """Show all staff members."""
     conn = get_db_connection()
 
-    global_totals = conn.execute('''
-        SELECT 
-            COALESCE(SUM(CASE WHEN expense_type = 'shared' THEN amount_out ELSE 0 END), 0) as total_shared_out
-        FROM cash_records
-    ''').fetchone()
-    grand_total_out = global_totals['total_shared_out']
-
-    active_total_in = conn.execute('''
-        SELECT COALESCE(SUM(cr.amount_in), 0) as active_total_in
-        FROM cash_records cr
-        JOIN staff s ON cr.staff_id = s.id
-        WHERE s.is_active = 1
-    ''').fetchone()['active_total_in']
-
     # Get staff with their transaction counts and balances
     staff_raw = conn.execute('''
         SELECT 
             s.*, 
             COUNT(cr.id) as transaction_count,
             COALESCE(SUM(cr.amount_in), 0) as total_in,
-            COALESCE(SUM(CASE WHEN cr.expense_type = 'personal' THEN cr.amount_out ELSE 0 END), 0) as personal_refunds
+            COALESCE(SUM(CASE WHEN cr.expense_type = 'personal' THEN cr.amount_out ELSE 0 END), 0) as personal_refunds,
+            (SELECT COALESCE(SUM(amount), 0) FROM transaction_splits ts WHERE ts.staff_id = s.id) as shared_expense
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
         WHERE s.is_active = 1
@@ -494,9 +522,7 @@ def staff_list():
     
     staff = []
     for row in staff_raw:
-        contribution_percentage = row['total_in'] / active_total_in if active_total_in > 0 else 0
-        shared_expense = grand_total_out * contribution_percentage
-        net_balance = row['total_in'] - shared_expense - row['personal_refunds']
+        net_balance = row['total_in'] - row['shared_expense'] - row['personal_refunds']
         
         staff.append({
             'id': row['id'],
@@ -630,30 +656,14 @@ def delete_staff(id):
     """Delete a staff member (Soft delete)."""
     conn = get_db_connection()
 
-    global_totals = conn.execute('''
-        SELECT 
-            COALESCE(SUM(CASE WHEN expense_type = 'shared' THEN amount_out ELSE 0 END), 0) as total_shared_out
-        FROM cash_records
-    ''').fetchone()
-    grand_total_out = global_totals['total_shared_out']
-
-    active_total_in = conn.execute('''
-        SELECT COALESCE(SUM(cr.amount_in), 0) as active_total_in
-        FROM cash_records cr
-        JOIN staff s ON cr.staff_id = s.id
-        WHERE s.is_active = 1
-    ''').fetchone()['active_total_in']
-
     staff_totals = conn.execute('''
         SELECT 
-            COALESCE(SUM(amount_in), 0) as total_in,
-            COALESCE(SUM(CASE WHEN expense_type = 'personal' THEN amount_out ELSE 0 END), 0) as personal_refunds
-        FROM cash_records
-        WHERE staff_id = ?
-    ''', (id,)).fetchone()
+            (SELECT COALESCE(SUM(amount_in), 0) FROM cash_records WHERE staff_id = ?) as total_in,
+            (SELECT COALESCE(SUM(amount_out), 0) FROM cash_records WHERE staff_id = ? AND expense_type = 'personal') as personal_refunds,
+            (SELECT COALESCE(SUM(amount), 0) FROM transaction_splits WHERE staff_id = ?) as shared_expense
+    ''', (id, id, id)).fetchone()
 
-    their_shared_expense = grand_total_out * (staff_totals['total_in'] / active_total_in) if active_total_in > 0 else 0
-    their_net_balance = staff_totals['total_in'] - their_shared_expense - staff_totals['personal_refunds']
+    their_net_balance = staff_totals['total_in'] - staff_totals['shared_expense'] - staff_totals['personal_refunds']
 
     if their_net_balance < -0.01:
         conn.close()
