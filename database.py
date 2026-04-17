@@ -45,6 +45,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS staff (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
+            is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')

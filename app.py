@@ -211,7 +211,7 @@ def transactions():
 def add_transaction():
     """Show the add transaction form and handle form submission."""
     conn = get_db_connection()
-    staff_list = conn.execute('SELECT * FROM staff ORDER BY name').fetchall()
+    staff_list = conn.execute('SELECT * FROM staff WHERE is_active = 1 ORDER BY name').fetchall()
 
     if request.method == 'POST':
         # Get form data
@@ -399,6 +399,14 @@ def staff_summary():
     grand_total_refunds = global_totals['total_refunds']
     grand_balance = grand_total_in - grand_total_out - grand_total_refunds
 
+    # calculate active_total_in for proportional shared expenses
+    active_total_in = conn.execute('''
+        SELECT COALESCE(SUM(cr.amount_in), 0) as active_total_in
+        FROM cash_records cr
+        JOIN staff s ON cr.staff_id = s.id
+        WHERE s.is_active = 1
+    ''').fetchone()['active_total_in']
+
     query = '''
         SELECT
             s.id,
@@ -408,6 +416,7 @@ def staff_summary():
             COUNT(CASE WHEN cr.amount_in > 0 THEN cr.id END) as transaction_count
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
+        WHERE s.is_active = 1
     '''
     params = []
 
@@ -422,8 +431,8 @@ def staff_summary():
     # Build the final summary list with shared expenses and personal refunds
     summary = []
     for row in summary_raw:
-        # Calculate shared expense based on contribution percentage
-        contribution_percentage = row['total_in'] / grand_total_in if grand_total_in > 0 else 0
+        # Calculate shared expense based on contribution percentage from ACTIVE members
+        contribution_percentage = row['total_in'] / active_total_in if active_total_in > 0 else 0
         shared_expense = grand_total_out * contribution_percentage
 
         summary.append({
@@ -460,6 +469,7 @@ def staff_list():
         SELECT s.*, COUNT(cr.id) as transaction_count
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
+        WHERE s.is_active = 1
         GROUP BY s.id
         ORDER BY s.name
     ''').fetchall()
@@ -565,20 +575,40 @@ def edit_staff(id):
 @app.route('/staff/delete/<int:id>', methods=['POST'])
 @admin_required
 def delete_staff(id):
-    """Delete a staff member (only if no transactions are linked)."""
+    """Delete a staff member (Soft delete)."""
     conn = get_db_connection()
 
-    # Check if staff has any transactions
-    count = conn.execute(
-        'SELECT COUNT(*) as count FROM cash_records WHERE staff_id = ?', (id,)
-    ).fetchone()['count']
+    global_totals = conn.execute('''
+        SELECT 
+            COALESCE(SUM(CASE WHEN expense_type = 'shared' THEN amount_out ELSE 0 END), 0) as total_shared_out
+        FROM cash_records
+    ''').fetchone()
+    grand_total_out = global_totals['total_shared_out']
 
-    if count > 0:
+    active_total_in = conn.execute('''
+        SELECT COALESCE(SUM(cr.amount_in), 0) as active_total_in
+        FROM cash_records cr
+        JOIN staff s ON cr.staff_id = s.id
+        WHERE s.is_active = 1
+    ''').fetchone()['active_total_in']
+
+    staff_totals = conn.execute('''
+        SELECT 
+            COALESCE(SUM(amount_in), 0) as total_in,
+            COALESCE(SUM(CASE WHEN expense_type = 'personal' THEN amount_out ELSE 0 END), 0) as personal_refunds
+        FROM cash_records
+        WHERE staff_id = ?
+    ''', (id,)).fetchone()
+
+    their_shared_expense = grand_total_out * (staff_totals['total_in'] / active_total_in) if active_total_in > 0 else 0
+    their_net_balance = staff_totals['total_in'] - their_shared_expense - staff_totals['personal_refunds']
+
+    if abs(their_net_balance) > 0.01:
         conn.close()
-        flash(f'Cannot delete staff. They have {count} transaction(s) linked.', 'danger')
+        flash(f'Cannot delete staff. Their balance must be exactly RM 0.00 first (Current: RM {their_net_balance:.2f}).', 'danger')
         return redirect(url_for('staff_list'))
 
-    conn.execute('DELETE FROM staff WHERE id = ?', (id,))
+    conn.execute('UPDATE staff SET is_active = 0 WHERE id = ?', (id,))
     conn.commit()
     conn.close()
 
