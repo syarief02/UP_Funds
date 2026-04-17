@@ -102,8 +102,8 @@ def dashboard():
         FROM cash_records
     ''').fetchone()
 
-    # Count total staff
-    staff_count = conn.execute('SELECT COUNT(*) as count FROM staff').fetchone()['count']
+    # Count total active staff
+    staff_count = conn.execute('SELECT COUNT(*) as count FROM staff WHERE is_active = 1').fetchone()['count']
 
     # Count total transactions
     transaction_count = conn.execute('SELECT COUNT(*) as count FROM cash_records').fetchone()['count']
@@ -640,7 +640,41 @@ def delete_staff(id):
         flash(f'Cannot delete staff. They owe the lab money (Balance: RM {their_net_balance:.2f}). They must pay their negative balance first.', 'danger')
         return redirect(url_for('staff_list'))
 
-    # If balance >= 0, we allow deletion (any remaining balance becomes a donation)
+    # If balance > 0, distribute to active members as donation
+    if their_net_balance > 0.01:
+        staff_name = conn.execute('SELECT name FROM staff WHERE id = ?', (id,)).fetchone()['name']
+        
+        # Get active staff excluding this one
+        other_active = conn.execute('SELECT id FROM staff WHERE is_active = 1 AND id != ?', (id,)).fetchall()
+        
+        if other_active:
+            # 1. Output transaction for the resigning staff (Donation out)
+            today = date.today().strftime('%Y-%m-%d')
+            conn.execute('''
+                INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, expense_type, note)
+                VALUES (?, ?, 0, ?, 'personal', ?)
+            ''', (id, today, their_net_balance, 'Balance donated to lab'))
+            
+            # 2. Input transactions for remaining active staff
+            count = len(other_active)
+            split_amount = round(their_net_balance / count, 2)
+            total_distributed = 0
+            
+            for i, st in enumerate(other_active):
+                st_id = st['id']
+                # Last person gets the exact remainder to prevent rounding errors
+                if i == count - 1:
+                    amount = round(their_net_balance - total_distributed, 2)
+                else:
+                    amount = split_amount
+                    total_distributed += amount
+                
+                conn.execute('''
+                    INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, expense_type, note)
+                    VALUES (?, ?, ?, 0, 'shared', ?)
+                ''', (st_id, today, amount, f'Donation from {staff_name}'))
+
+    # Execute soft delete
     conn.execute('UPDATE staff SET is_active = 0 WHERE id = ?', (id,))
     conn.commit()
     conn.close()
