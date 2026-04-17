@@ -523,11 +523,18 @@ def add_staff():
     conn = get_db_connection()
 
     # Check if name already exists
-    existing = conn.execute('SELECT id FROM staff WHERE LOWER(name) = LOWER(?)', (name,)).fetchone()
+    existing = conn.execute('SELECT id, is_active FROM staff WHERE LOWER(name) = LOWER(?)', (name,)).fetchone()
     if existing:
-        conn.close()
-        flash(f'Staff "{name}" already exists.', 'warning')
-        return redirect(url_for('staff_list'))
+        if existing['is_active'] == 1:
+            conn.close()
+            flash(f'Staff "{name}" already exists.', 'warning')
+            return redirect(url_for('staff_list'))
+        else:
+            conn.execute('UPDATE staff SET is_active = 1 WHERE id = ?', (existing['id'],))
+            conn.commit()
+            conn.close()
+            flash(f'Staff "{name}" has been restored!', 'success')
+            return redirect(url_for('staff_list'))
 
     conn.execute('INSERT INTO staff (name) VALUES (?)', (name,))
     conn.commit()
@@ -553,14 +560,24 @@ def add_staff_ajax():
     conn = get_db_connection()
 
     # Check if name already exists
-    existing = conn.execute('SELECT id FROM staff WHERE LOWER(name) = LOWER(?)', (name,)).fetchone()
+    existing = conn.execute('SELECT id, is_active FROM staff WHERE LOWER(name) = LOWER(?)', (name,)).fetchone()
     if existing:
-        conn.close()
-        return jsonify({
-            'success': True,
-            'message': f'Staff "{name}" already exists.',
-            'staff': {'id': existing['id'], 'name': name}
-        })
+        if existing['is_active'] == 1:
+            conn.close()
+            return jsonify({
+                'success': True,
+                'message': f'Staff "{name}" already exists.',
+                'staff': {'id': existing['id'], 'name': name}
+            })
+        else:
+            conn.execute('UPDATE staff SET is_active = 1 WHERE id = ?', (existing['id'],))
+            conn.commit()
+            conn.close()
+            return jsonify({
+                'success': True,
+                'message': f'Staff "{name}" has been restored!',
+                'staff': {'id': existing['id'], 'name': name}
+            })
 
     cursor = conn.execute('INSERT INTO staff (name) VALUES (?)', (name,))
     new_id = cursor.lastrowid
@@ -588,12 +605,15 @@ def edit_staff(id):
 
     # Check if name already exists for a different staff member
     existing = conn.execute(
-        'SELECT id FROM staff WHERE LOWER(name) = LOWER(?) AND id != ?',
+        'SELECT id, is_active FROM staff WHERE LOWER(name) = LOWER(?) AND id != ?',
         (name, id)
     ).fetchone()
     if existing:
         conn.close()
-        flash(f'Staff name "{name}" is already taken.', 'warning')
+        if existing['is_active'] == 1:
+            flash(f'Staff name "{name}" is already taken by an active member.', 'warning')
+        else:
+            flash(f'Staff name "{name}" is already taken by a past member. Please choose a different name.', 'warning')
         return redirect(url_for('staff_list'))
 
     conn.execute('UPDATE staff SET name = ? WHERE id = ?', (name, id))
