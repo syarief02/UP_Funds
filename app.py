@@ -464,15 +464,47 @@ def staff_list():
     """Show all staff members."""
     conn = get_db_connection()
 
-    # Get staff with their transaction counts
-    staff = conn.execute('''
-        SELECT s.*, COUNT(cr.id) as transaction_count
+    global_totals = conn.execute('''
+        SELECT 
+            COALESCE(SUM(CASE WHEN expense_type = 'shared' THEN amount_out ELSE 0 END), 0) as total_shared_out
+        FROM cash_records
+    ''').fetchone()
+    grand_total_out = global_totals['total_shared_out']
+
+    active_total_in = conn.execute('''
+        SELECT COALESCE(SUM(cr.amount_in), 0) as active_total_in
+        FROM cash_records cr
+        JOIN staff s ON cr.staff_id = s.id
+        WHERE s.is_active = 1
+    ''').fetchone()['active_total_in']
+
+    # Get staff with their transaction counts and balances
+    staff_raw = conn.execute('''
+        SELECT 
+            s.*, 
+            COUNT(cr.id) as transaction_count,
+            COALESCE(SUM(cr.amount_in), 0) as total_in,
+            COALESCE(SUM(CASE WHEN cr.expense_type = 'personal' THEN cr.amount_out ELSE 0 END), 0) as personal_refunds
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
         WHERE s.is_active = 1
         GROUP BY s.id
         ORDER BY s.name
     ''').fetchall()
+    
+    staff = []
+    for row in staff_raw:
+        contribution_percentage = row['total_in'] / active_total_in if active_total_in > 0 else 0
+        shared_expense = grand_total_out * contribution_percentage
+        net_balance = row['total_in'] - shared_expense - row['personal_refunds']
+        
+        staff.append({
+            'id': row['id'],
+            'name': row['name'],
+            'created_at': row['created_at'],
+            'transaction_count': row['transaction_count'],
+            'net_balance': net_balance
+        })
 
     conn.close()
     return render_template('staff.html', staff=staff)
@@ -603,11 +635,12 @@ def delete_staff(id):
     their_shared_expense = grand_total_out * (staff_totals['total_in'] / active_total_in) if active_total_in > 0 else 0
     their_net_balance = staff_totals['total_in'] - their_shared_expense - staff_totals['personal_refunds']
 
-    if abs(their_net_balance) > 0.01:
+    if their_net_balance < -0.01:
         conn.close()
-        flash(f'Cannot delete staff. Their balance must be exactly RM 0.00 first (Current: RM {their_net_balance:.2f}).', 'danger')
+        flash(f'Cannot delete staff. They owe the lab money (Balance: RM {their_net_balance:.2f}). They must pay their negative balance first.', 'danger')
         return redirect(url_for('staff_list'))
 
+    # If balance >= 0, we allow deletion (any remaining balance becomes a donation)
     conn.execute('UPDATE staff SET is_active = 0 WHERE id = ?', (id,))
     conn.commit()
     conn.close()

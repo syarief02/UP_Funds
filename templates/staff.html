@@ -77,7 +77,7 @@
                                         </button>
                                         <button type="button" class="btn btn-outline-danger"
                                                 title="Delete"
-                                                onclick="confirmDeleteStaff({{ s['id'] }}, '{{ s['name']|e }}')">
+                                                onclick="confirmDeleteStaff({{ s['id'] }}, '{{ s['name']|e }}', {{ s['net_balance'] }})">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -138,8 +138,8 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p>Are you sure you want to delete this staff member?</p>
-                <p class="fw-medium" id="deleteStaffInfo"></p>
+                <p id="deleteWarningMsg">Are you sure you want to delete this staff member?</p>
+                <p class="fw-medium text-center fs-5" id="deleteStaffInfo"></p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -164,8 +164,20 @@
     }
 
     // Show Delete Staff confirmation modal
-    function confirmDeleteStaff(id, name) {
+    function confirmDeleteStaff(id, name, balance) {
         document.getElementById('deleteStaffInfo').textContent = name;
+        
+        let warningText = 'Are you sure you want to delete this staff member?';
+        if (balance > 0.01) {
+            warningText = `Are you sure you want to delete this staff member?<br><br>
+                           <div class="alert alert-warning text-dark mb-0 fs-6">
+                               <i class="bi bi-info-circle me-1"></i>
+                               <strong>They have a balance of RM ${balance.toFixed(2)}.</strong><br>
+                               Deleting them will absorb this money into the lab's surplus as a donation.
+                           </div>`;
+        }
+        document.getElementById('deleteWarningMsg').innerHTML = warningText;
+
         document.getElementById('deleteStaffForm').action = `/staff/delete/${id}`;
         new bootstrap.Modal(document.getElementById('deleteStaffModal')).show();
     }
