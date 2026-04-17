@@ -75,19 +75,11 @@
                                                 onclick="showEditModal({{ s['id'] }}, '{{ s['name']|e }}')">
                                             <i class="bi bi-pencil"></i>
                                         </button>
-                                        {% if s['transaction_count'] == 0 %}
                                         <button type="button" class="btn btn-outline-danger"
                                                 title="Delete"
                                                 onclick="confirmDeleteStaff({{ s['id'] }}, '{{ s['name']|e }}')">
                                             <i class="bi bi-trash"></i>
                                         </button>
-                                        {% else %}
-                                        <button type="button" class="btn btn-outline-secondary"
-                                                title="Cannot delete: has {{ s['transaction_count'] }} transaction(s)"
-                                                disabled>
-                                            <i class="bi bi-lock"></i>
-                                        </button>
-                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>
