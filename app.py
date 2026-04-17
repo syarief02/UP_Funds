@@ -777,6 +777,6 @@ if __name__ == '__main__':
     # Start the Flask development server
     print("\n========================================")
     print("  UP Funds - Office Money Collection")
-    print("  Open: http://127.0.0.1:5000")
+    print("  Open: http://127.0.0.2:5001")
     print("========================================\n")
-    app.run(debug=True, port=5000)
+    app.run(host='127.0.0.2', port=5001, debug=True)
