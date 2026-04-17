@@ -84,9 +84,11 @@
         <a href="{{ url_for('export_csv') }}" class="btn btn-outline-success btn-sm">
             <i class="bi bi-download me-1"></i>Export CSV
         </a>
+        {% if is_admin %}
         <a href="{{ url_for('add_transaction') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-lg me-1"></i>Add Transaction
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -104,7 +106,9 @@
                         <th class="text-end">Amount In</th>
                         <th class="text-end">Amount Out</th>
                         <th>Note</th>
+                        {% if is_admin %}
                         <th class="text-center">Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -130,6 +134,7 @@
                             {% endif %}
                         </td>
                         <td class="text-muted small">{{ record['note'][:40] }}{{ '...' if record['note']|length > 40 }}</td>
+                        {% if is_admin %}
                         <td class="text-center">
                             <div class="btn-group btn-group-sm">
                                 <a href="{{ url_for('edit_transaction', id=record['id']) }}"
@@ -143,6 +148,7 @@
                                 </button>
                             </div>
                         </td>
+                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -155,7 +161,9 @@
             {% if search_query or staff_filter or date_filter or month_filter %}
                 <a href="{{ url_for('transactions') }}" class="btn btn-outline-primary btn-sm">Clear Filters</a>
             {% else %}
+                {% if is_admin %}
                 <a href="{{ url_for('add_transaction') }}" class="btn btn-primary btn-sm">Add First Transaction</a>
+                {% endif %}
             {% endif %}
         </div>
         {% endif %}

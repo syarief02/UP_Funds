@@ -16,23 +16,74 @@ Run this file to start the web server:
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, flash, jsonify, Response
+    url_for, flash, jsonify, Response, session
 )
 from database import get_db_connection, init_db, seed_data
 from datetime import date, datetime
 import csv
 import io
+from functools import wraps
+from werkzeug.security import check_password_hash
 
 # Create the Flask app
 app = Flask(__name__)
 app.secret_key = 'up-funds-secret-key-2026'  # Required for flash messages
 
 
-# Make current datetime available in all templates
+# Make current datetime and user role available in all templates
 @app.context_processor
 def inject_now():
-    """Inject current datetime into every template for the topbar date display."""
-    return {'now': datetime.now()}
+    """Inject current datetime and admin status into every template."""
+    is_admin = session.get('role') == 'admin'
+    return {'now': datetime.now(), 'is_admin': is_admin}
+
+# --- Authentication Decorator ---
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') != 'admin':
+            flash('Admin access is required to view this page.', 'danger')
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Admin login page."""
+    if session.get('role') == 'admin':
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+        conn.close()
+
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            flash('Logged in successfully!', 'success')
+            
+            # Redirect back to where they came from, or dashboard
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('dashboard'))
+        else:
+            flash('Invalid username or password.', 'danger')
+
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    """Logout the user."""
+    session.clear()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('dashboard'))
 
 
 # ============================================================
@@ -156,6 +207,7 @@ def transactions():
 
 
 @app.route('/transactions/add', methods=['GET', 'POST'])
+@admin_required
 def add_transaction():
     """Show the add transaction form and handle form submission."""
     conn = get_db_connection()
@@ -228,6 +280,7 @@ def add_transaction():
 
 
 @app.route('/transactions/edit/<int:id>', methods=['GET', 'POST'])
+@admin_required
 def edit_transaction(id):
     """Edit an existing transaction."""
     conn = get_db_connection()
@@ -309,6 +362,7 @@ def edit_transaction(id):
 
 
 @app.route('/transactions/delete/<int:id>', methods=['POST'])
+@admin_required
 def delete_transaction(id):
     """Delete a transaction."""
     conn = get_db_connection()
@@ -330,14 +384,27 @@ def staff_summary():
 
     search_query = request.args.get('search', '')
 
+    # Calculate global grand totals first
+    global_totals = conn.execute('''
+        SELECT 
+            COALESCE(SUM(amount_in), 0) as total_in,
+            COALESCE(SUM(amount_out), 0) as total_out
+        FROM cash_records
+    ''').fetchone()
+    grand_total_in = global_totals['total_in']
+    grand_total_out = global_totals['total_out']
+    grand_balance = grand_total_in - grand_total_out
+
+    # Calculate shared expense
+    total_staff = conn.execute('SELECT COUNT(*) as count FROM staff').fetchone()['count']
+    shared_expense = grand_total_out / total_staff if total_staff > 0 else 0
+
     query = '''
         SELECT
             s.id,
             s.name,
             COALESCE(SUM(cr.amount_in), 0) as total_in,
-            COALESCE(SUM(cr.amount_out), 0) as total_out,
-            COALESCE(SUM(cr.amount_in), 0) - COALESCE(SUM(cr.amount_out), 0) as net_balance,
-            COUNT(cr.id) as transaction_count
+            COUNT(CASE WHEN cr.amount_in > 0 THEN cr.id END) as transaction_count
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
     '''
@@ -349,12 +416,18 @@ def staff_summary():
 
     query += ' GROUP BY s.id, s.name ORDER BY s.name'
 
-    summary = conn.execute(query, params).fetchall()
+    summary_raw = conn.execute(query, params).fetchall()
 
-    # Calculate grand totals
-    grand_total_in = sum(row['total_in'] for row in summary)
-    grand_total_out = sum(row['total_out'] for row in summary)
-    grand_balance = grand_total_in - grand_total_out
+    # Build the final summary list with shared expenses
+    summary = []
+    for row in summary_raw:
+        summary.append({
+            'name': row['name'],
+            'transaction_count': row['transaction_count'],
+            'total_in': row['total_in'],
+            'shared_expense': shared_expense,
+            'net_balance': row['total_in'] - shared_expense
+        })
 
     conn.close()
 
@@ -370,6 +443,7 @@ def staff_summary():
 # STAFF MANAGEMENT - CRUD for staff
 # ============================================================
 @app.route('/staff')
+@admin_required
 def staff_list():
     """Show all staff members."""
     conn = get_db_connection()
@@ -388,6 +462,7 @@ def staff_list():
 
 
 @app.route('/staff/add', methods=['POST'])
+@admin_required
 def add_staff():
     """Add a new staff member."""
     name = request.form.get('name', '').strip()
@@ -414,6 +489,7 @@ def add_staff():
 
 
 @app.route('/staff/add-ajax', methods=['POST'])
+@admin_required
 def add_staff_ajax():
     """
     Add a new staff member via AJAX (from the transaction form).
@@ -450,6 +526,7 @@ def add_staff_ajax():
 
 
 @app.route('/staff/edit/<int:id>', methods=['POST'])
+@admin_required
 def edit_staff(id):
     """Edit a staff member's name."""
     name = request.form.get('name', '').strip()
@@ -479,6 +556,7 @@ def edit_staff(id):
 
 
 @app.route('/staff/delete/<int:id>', methods=['POST'])
+@admin_required
 def delete_staff(id):
     """Delete a staff member (only if no transactions are linked)."""
     conn = get_db_connection()

@@ -13,6 +13,7 @@ The database file (office_money.db) is stored in the project root folder.
 import sqlite3
 import os
 from datetime import datetime, date, timedelta
+from werkzeug.security import generate_password_hash
 
 # Path to the SQLite database file (in the same folder as this script)
 DATABASE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'office_money.db')
@@ -44,6 +45,17 @@ def init_db():
         CREATE TABLE IF NOT EXISTS staff (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Create the 'users' table for authentication
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT DEFAULT 'user',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -82,6 +94,14 @@ def seed_data():
         conn.close()
         print("[DB] Data already exists. Skipping seed.")
         return
+
+    # --- Insert default Admin user ---
+    # Username: admin, Password: admin123
+    admin_password_hash = generate_password_hash('admin123')
+    cursor.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        ('admin', admin_password_hash, 'admin')
+    )
 
     # --- Insert sample staff members ---
     sample_staff = [

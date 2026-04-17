@@ -119,7 +119,9 @@
                 <div class="empty-state">
                     <i class="bi bi-inbox"></i>
                     <p>No transactions yet</p>
+                    {% if is_admin %}
                     <a href="{{ url_for('add_transaction') }}" class="btn btn-primary btn-sm">Add First Transaction</a>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>

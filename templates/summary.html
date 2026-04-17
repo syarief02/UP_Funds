@@ -90,8 +90,8 @@
                         <th>Staff Name</th>
                         <th class="text-center">Transactions</th>
                         <th class="text-end">Total In (RM)</th>
-                        <th class="text-end">Total Out (RM)</th>
-                        <th class="text-end">Net Balance (RM)</th>
+                        <th class="text-end">Shared Expense (RM)</th>
+                        <th class="text-end">Individual Balance (RM)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -112,8 +112,8 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
-                            {% if row['total_out'] > 0 %}
-                                <span class="amount-out">RM {{ "%.2f"|format(row['total_out']) }}</span>
+                            {% if row['shared_expense'] > 0 %}
+                                <span class="amount-out">RM {{ "%.2f"|format(row['shared_expense']) }}</span>
                             {% else %}
                                 <span class="text-muted">RM 0.00</span>
                             {% endif %}
@@ -143,7 +143,9 @@
             {% if search_query %}
                 <a href="{{ url_for('staff_summary') }}" class="btn btn-outline-primary btn-sm">Clear Search</a>
             {% else %}
+                {% if is_admin %}
                 <a href="{{ url_for('staff_list') }}" class="btn btn-primary btn-sm">Add Staff</a>
+                {% endif %}
             {% endif %}
         </div>
         {% endif %}
