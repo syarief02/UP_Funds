@@ -129,6 +129,9 @@
                         <td class="text-end">
                             {% if record['amount_out'] > 0 %}
                                 <span class="amount-out fw-medium">-RM {{ "%.2f"|format(record['amount_out']) }}</span>
+                                {% if record['expense_type'] == 'personal' %}
+                                    <br><span class="badge bg-warning text-dark" style="font-size: 0.65em;">Refund</span>
+                                {% endif %}
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}

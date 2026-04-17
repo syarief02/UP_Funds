@@ -68,6 +68,7 @@ def init_db():
             record_date DATE NOT NULL,
             amount_in REAL DEFAULT 0.00,
             amount_out REAL DEFAULT 0.00,
+            expense_type TEXT DEFAULT 'shared',
             note TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -116,18 +117,19 @@ def seed_data():
     # --- Insert sample cash records spread across recent dates ---
     today = date.today()
     sample_records = [
-        # (staff_id, record_date, amount_in, amount_out, note)
-        (1, (today - timedelta(days=30)).strftime('%Y-%m-%d'), 500.00, 0.00, 'Monthly office contribution'),
-        (2, (today - timedelta(days=25)).strftime('%Y-%m-%d'), 300.00, 0.00, 'Weekly collection'),
-        (3, (today - timedelta(days=20)).strftime('%Y-%m-%d'), 0.00, 150.00, 'Office supplies purchase'),
-        (4, (today - timedelta(days=15)).strftime('%Y-%m-%d'), 200.00, 0.00, 'Event fund contribution'),
-        (5, (today - timedelta(days=10)).strftime('%Y-%m-%d'), 0.00, 80.00, 'Printing costs'),
-        (1, (today - timedelta(days=7)).strftime('%Y-%m-%d'), 0.00, 200.00, 'Stationery reimbursement'),
-        (2, (today - timedelta(days=3)).strftime('%Y-%m-%d'), 150.00, 0.00, 'Extra contribution'),
-        (3, today.strftime('%Y-%m-%d'), 400.00, 0.00, 'Monthly office contribution'),
+        # (staff_id, record_date, amount_in, amount_out, expense_type, note)
+        (1, (today - timedelta(days=30)).strftime('%Y-%m-%d'), 500.00, 0.00, 'shared', 'Monthly office contribution'),
+        (2, (today - timedelta(days=25)).strftime('%Y-%m-%d'), 300.00, 0.00, 'shared', 'Weekly collection'),
+        (3, (today - timedelta(days=20)).strftime('%Y-%m-%d'), 0.00, 150.00, 'shared', 'Office supplies purchase'),
+        (4, (today - timedelta(days=15)).strftime('%Y-%m-%d'), 200.00, 0.00, 'shared', 'Event fund contribution'),
+        (5, (today - timedelta(days=10)).strftime('%Y-%m-%d'), 0.00, 80.00, 'shared', 'Printing costs'),
+        (1, (today - timedelta(days=7)).strftime('%Y-%m-%d'), 0.00, 200.00, 'shared', 'Stationery reimbursement'),
+        (2, (today - timedelta(days=3)).strftime('%Y-%m-%d'), 150.00, 0.00, 'shared', 'Extra contribution'),
+        (3, today.strftime('%Y-%m-%d'), 400.00, 0.00, 'shared', 'Monthly office contribution'),
+        (1, today.strftime('%Y-%m-%d'), 0.00, 150.00, 'personal', 'Partial refund requested'),
     ]
     cursor.executemany(
-        "INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, note) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, expense_type, note) VALUES (?, ?, ?, ?, ?, ?)",
         sample_records
     )
 

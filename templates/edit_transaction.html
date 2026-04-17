@@ -78,6 +78,18 @@
                         Only one of Amount In or Amount Out should have a value.
                     </div>
 
+                    <!-- Expense Type (Only relevant for Amount Out) -->
+                    <div class="mb-3" id="expenseTypeGroup" style="display: none;">
+                        <label for="expense_type" class="form-label fw-medium">
+                            <i class="bi bi-tags me-1"></i>Expense Type
+                        </label>
+                        <select class="form-select" id="expense_type" name="expense_type">
+                            <option value="shared" {% if record['expense_type'] == 'shared' %}selected{% endif %}>Shared Office Expense</option>
+                            <option value="personal" {% if record['expense_type'] == 'personal' %}selected{% endif %}>Personal Refund / Withdrawal</option>
+                        </select>
+                        <div class="form-text">Choose whether this expense is for the whole unit or a personal refund to the staff.</div>
+                    </div>
+
                     <!-- Note -->
                     <div class="mb-4">
                         <label for="note" class="form-label fw-medium">
@@ -113,6 +125,9 @@
         const inVal = parseFloat(amountIn.value) || 0;
         const outVal = parseFloat(amountOut.value) || 0;
         amountHint.style.display = (inVal > 0 && outVal > 0) ? 'block' : 'none';
+        
+        // Show expense type if amount out is filled
+        document.getElementById('expenseTypeGroup').style.display = outVal > 0 ? 'block' : 'none';
     }
 
     amountIn.addEventListener('input', checkAmounts);

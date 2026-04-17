@@ -219,6 +219,7 @@ def add_transaction():
         record_date = request.form.get('record_date', '').strip()
         amount_in = request.form.get('amount_in', '').strip()
         amount_out = request.form.get('amount_out', '').strip()
+        expense_type = request.form.get('expense_type', 'shared').strip()
         note = request.form.get('note', '').strip()
 
         # --- Validation ---
@@ -264,9 +265,9 @@ def add_transaction():
 
         # Insert the transaction
         conn.execute('''
-            INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, note)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (staff_id, record_date, amount_in, amount_out, note))
+            INSERT INTO cash_records (staff_id, record_date, amount_in, amount_out, expense_type, note)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (staff_id, record_date, amount_in, amount_out, expense_type, note))
         conn.commit()
         conn.close()
 
@@ -300,6 +301,7 @@ def edit_transaction(id):
         record_date = request.form.get('record_date', '').strip()
         amount_in = request.form.get('amount_in', '').strip()
         amount_out = request.form.get('amount_out', '').strip()
+        expense_type = request.form.get('expense_type', 'shared').strip()
         note = request.form.get('note', '').strip()
 
         # --- Validation ---
@@ -345,10 +347,10 @@ def edit_transaction(id):
         # Update the transaction
         conn.execute('''
             UPDATE cash_records
-            SET staff_id = ?, record_date = ?, amount_in = ?, amount_out = ?, note = ?,
+            SET staff_id = ?, record_date = ?, amount_in = ?, amount_out = ?, expense_type = ?, note = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (staff_id, record_date, amount_in, amount_out, note, id))
+        ''', (staff_id, record_date, amount_in, amount_out, expense_type, note, id))
         conn.commit()
         conn.close()
 
@@ -388,22 +390,21 @@ def staff_summary():
     global_totals = conn.execute('''
         SELECT 
             COALESCE(SUM(amount_in), 0) as total_in,
-            COALESCE(SUM(amount_out), 0) as total_out
+            COALESCE(SUM(CASE WHEN expense_type = 'shared' THEN amount_out ELSE 0 END), 0) as total_shared_out,
+            COALESCE(SUM(CASE WHEN expense_type = 'personal' THEN amount_out ELSE 0 END), 0) as total_refunds
         FROM cash_records
     ''').fetchone()
     grand_total_in = global_totals['total_in']
-    grand_total_out = global_totals['total_out']
-    grand_balance = grand_total_in - grand_total_out
-
-    # Calculate shared expense
-    total_staff = conn.execute('SELECT COUNT(*) as count FROM staff').fetchone()['count']
-    shared_expense = grand_total_out / total_staff if total_staff > 0 else 0
+    grand_total_out = global_totals['total_shared_out']  # Shared expenses only
+    grand_total_refunds = global_totals['total_refunds']
+    grand_balance = grand_total_in - grand_total_out - grand_total_refunds
 
     query = '''
         SELECT
             s.id,
             s.name,
             COALESCE(SUM(cr.amount_in), 0) as total_in,
+            COALESCE(SUM(CASE WHEN cr.expense_type = 'personal' THEN cr.amount_out ELSE 0 END), 0) as personal_refunds,
             COUNT(CASE WHEN cr.amount_in > 0 THEN cr.id END) as transaction_count
         FROM staff s
         LEFT JOIN cash_records cr ON s.id = cr.staff_id
@@ -418,15 +419,20 @@ def staff_summary():
 
     summary_raw = conn.execute(query, params).fetchall()
 
-    # Build the final summary list with shared expenses
+    # Build the final summary list with shared expenses and personal refunds
     summary = []
     for row in summary_raw:
+        # Calculate shared expense based on contribution percentage
+        contribution_percentage = row['total_in'] / grand_total_in if grand_total_in > 0 else 0
+        shared_expense = grand_total_out * contribution_percentage
+
         summary.append({
             'name': row['name'],
             'transaction_count': row['transaction_count'],
             'total_in': row['total_in'],
+            'personal_refunds': row['personal_refunds'],
             'shared_expense': shared_expense,
-            'net_balance': row['total_in'] - shared_expense
+            'net_balance': row['total_in'] - shared_expense - row['personal_refunds']
         })
 
     conn.close()
@@ -435,6 +441,7 @@ def staff_summary():
                            summary=summary,
                            grand_total_in=grand_total_in,
                            grand_total_out=grand_total_out,
+                           grand_total_refunds=grand_total_refunds,
                            grand_balance=grand_balance,
                            search_query=search_query)
 
@@ -589,7 +596,7 @@ def export_csv():
 
     records = conn.execute('''
         SELECT cr.id, s.name as staff_name, cr.record_date,
-               cr.amount_in, cr.amount_out, cr.note
+               cr.amount_in, cr.amount_out, cr.expense_type, cr.note
         FROM cash_records cr
         JOIN staff s ON cr.staff_id = s.id
         ORDER BY cr.record_date DESC, cr.id DESC
@@ -602,7 +609,7 @@ def export_csv():
     writer = csv.writer(output)
 
     # Write header row
-    writer.writerow(['ID', 'Staff Name', 'Date', 'Amount In (RM)', 'Amount Out (RM)', 'Note'])
+    writer.writerow(['ID', 'Staff Name', 'Date', 'Amount In (RM)', 'Amount Out (RM)', 'Expense Type', 'Note'])
 
     # Write data rows
     for record in records:
@@ -612,6 +619,7 @@ def export_csv():
             record['record_date'],
             f"{record['amount_in']:.2f}",
             f"{record['amount_out']:.2f}",
+            record['expense_type'],
             record['note']
         ])
 

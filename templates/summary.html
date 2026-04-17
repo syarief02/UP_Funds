@@ -91,6 +91,7 @@
                         <th class="text-center">Transactions</th>
                         <th class="text-end">Total In (RM)</th>
                         <th class="text-end">Shared Expense (RM)</th>
+                        <th class="text-end">Refunds (RM)</th>
                         <th class="text-end">Individual Balance (RM)</th>
                     </tr>
                 </thead>
@@ -119,6 +120,13 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
+                            {% if row['personal_refunds'] > 0 %}
+                                <span class="amount-out">RM {{ "%.2f"|format(row['personal_refunds']) }}</span>
+                            {% else %}
+                                <span class="text-muted">RM 0.00</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
                             <span class="fw-semibold {% if row['net_balance'] >= 0 %}text-success{% else %}text-danger{% endif %}">
                                 RM {{ "%.2f"|format(row['net_balance']) }}
                             </span>
@@ -131,6 +139,7 @@
                         <td colspan="3" class="text-end">GRAND TOTAL</td>
                         <td class="text-end">RM {{ "%.2f"|format(grand_total_in) }}</td>
                         <td class="text-end">RM {{ "%.2f"|format(grand_total_out) }}</td>
+                        <td class="text-end">RM {{ "%.2f"|format(grand_total_refunds) }}</td>
                         <td class="text-end">RM {{ "%.2f"|format(grand_balance) }}</td>
                     </tr>
                 </tfoot>
