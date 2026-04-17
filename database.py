@@ -44,7 +44,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS staff (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
             is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -162,19 +162,12 @@ def seed_data():
     shared_expenses = cursor.fetchall()
     
     for expense in shared_expenses:
-        count = len(staff_totals)
-        if count > 0:
-            split_amount = round(expense['amount_out'] / count, 2)
-            total_distributed = 0
-            for i, s in enumerate(staff_totals):
-                if i == count - 1:
-                    amount = round(expense['amount_out'] - total_distributed, 2)
-                else:
-                    amount = split_amount
-                    total_distributed += amount
+        for s in staff_totals:
+            if active_total_in > 0:
+                split_amount = expense['amount_out'] * (s['total_in'] / active_total_in)
                 cursor.execute(
                     "INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)",
-                    (expense['id'], s['id'], amount)
+                    (expense['id'], s['id'], split_amount)
                 )
 
     conn.commit()

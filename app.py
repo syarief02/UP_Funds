@@ -277,20 +277,27 @@ def add_transaction():
         
         # If it's a shared expense, record the permanent splits NOW
         if amount_out > 0 and expense_type == 'shared':
-            active_staff = conn.execute('SELECT id FROM staff WHERE is_active = 1').fetchall()
+            active_staff = conn.execute('''
+                SELECT s.id, COALESCE(SUM(cr.amount_in), 0) as total_in
+                FROM staff s
+                LEFT JOIN cash_records cr ON s.id = cr.staff_id
+                WHERE s.is_active = 1
+                GROUP BY s.id
+            ''').fetchall()
             
+            active_total_in = sum(s['total_in'] for s in active_staff)
             count = len(active_staff)
+            
             if count > 0:
-                split_amount = round(amount_out / count, 2)
-                total_distributed = 0
-                for i, s in enumerate(active_staff):
-                    if i == count - 1:
-                        amount = round(amount_out - total_distributed, 2)
+                for s in active_staff:
+                    if active_total_in > 0:
+                        split_amount = amount_out * (s['total_in'] / active_total_in)
                     else:
-                        amount = split_amount
-                        total_distributed += amount
+                        # Fallback to equal split if literally no one has contributed yet
+                        split_amount = amount_out / count
+                    
                     conn.execute('INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)', 
-                                 (transaction_id, s['id'], amount))
+                                 (transaction_id, s['id'], split_amount))
 
         conn.commit()
         conn.close()
@@ -384,20 +391,26 @@ def edit_transaction(id):
         
         # Recalculate if it's currently a shared expense
         if amount_out > 0 and expense_type == 'shared':
-            active_staff = conn.execute('SELECT id FROM staff WHERE is_active = 1').fetchall()
+            active_staff = conn.execute('''
+                SELECT s.id, COALESCE(SUM(cr.amount_in), 0) as total_in
+                FROM staff s
+                LEFT JOIN cash_records cr ON s.id = cr.staff_id
+                WHERE s.is_active = 1
+                GROUP BY s.id
+            ''').fetchall()
             
+            active_total_in = sum(s['total_in'] for s in active_staff)
             count = len(active_staff)
+            
             if count > 0:
-                split_amount = round(amount_out / count, 2)
-                total_distributed = 0
-                for i, s in enumerate(active_staff):
-                    if i == count - 1:
-                        amount = round(amount_out - total_distributed, 2)
+                for s in active_staff:
+                    if active_total_in > 0:
+                        split_amount = amount_out * (s['total_in'] / active_total_in)
                     else:
-                        amount = split_amount
-                        total_distributed += amount
+                        split_amount = amount_out / count
+                        
                     conn.execute('INSERT INTO transaction_splits (transaction_id, staff_id, amount) VALUES (?, ?, ?)', 
-                                 (id, s['id'], amount))
+                                 (id, s['id'], split_amount))
 
         conn.commit()
         conn.close()
@@ -553,19 +566,12 @@ def add_staff():
 
     conn = get_db_connection()
 
-    # Check if name already exists
-    existing = conn.execute('SELECT id, is_active FROM staff WHERE LOWER(name) = LOWER(?)', (name,)).fetchone()
+    # Check if an ACTIVE staff with this name already exists
+    existing = conn.execute('SELECT id FROM staff WHERE LOWER(name) = LOWER(?) AND is_active = 1', (name,)).fetchone()
     if existing:
-        if existing['is_active'] == 1:
-            conn.close()
-            flash(f'Staff "{name}" already exists.', 'warning')
-            return redirect(url_for('staff_list'))
-        else:
-            conn.execute('UPDATE staff SET is_active = 1 WHERE id = ?', (existing['id'],))
-            conn.commit()
-            conn.close()
-            flash(f'Staff "{name}" has been restored!', 'success')
-            return redirect(url_for('staff_list'))
+        conn.close()
+        flash(f'Staff "{name}" already exists.', 'warning')
+        return redirect(url_for('staff_list'))
 
     conn.execute('INSERT INTO staff (name) VALUES (?)', (name,))
     conn.commit()
@@ -590,25 +596,15 @@ def add_staff_ajax():
 
     conn = get_db_connection()
 
-    # Check if name already exists
-    existing = conn.execute('SELECT id, is_active FROM staff WHERE LOWER(name) = LOWER(?)', (name,)).fetchone()
+    # Check if an ACTIVE staff with this name already exists
+    existing = conn.execute('SELECT id FROM staff WHERE LOWER(name) = LOWER(?) AND is_active = 1', (name,)).fetchone()
     if existing:
-        if existing['is_active'] == 1:
-            conn.close()
-            return jsonify({
-                'success': True,
-                'message': f'Staff "{name}" already exists.',
-                'staff': {'id': existing['id'], 'name': name}
-            })
-        else:
-            conn.execute('UPDATE staff SET is_active = 1 WHERE id = ?', (existing['id'],))
-            conn.commit()
-            conn.close()
-            return jsonify({
-                'success': True,
-                'message': f'Staff "{name}" has been restored!',
-                'staff': {'id': existing['id'], 'name': name}
-            })
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': f'Staff "{name}" already exists.',
+            'staff': {'id': existing['id'], 'name': name}
+        })
 
     cursor = conn.execute('INSERT INTO staff (name) VALUES (?)', (name,))
     new_id = cursor.lastrowid
@@ -634,17 +630,14 @@ def edit_staff(id):
 
     conn = get_db_connection()
 
-    # Check if name already exists for a different staff member
+    # Check if name already exists for a different ACTIVE staff member
     existing = conn.execute(
-        'SELECT id, is_active FROM staff WHERE LOWER(name) = LOWER(?) AND id != ?',
+        'SELECT id FROM staff WHERE LOWER(name) = LOWER(?) AND id != ? AND is_active = 1',
         (name, id)
     ).fetchone()
     if existing:
         conn.close()
-        if existing['is_active'] == 1:
-            flash(f'Staff name "{name}" is already taken by an active member.', 'warning')
-        else:
-            flash(f'Staff name "{name}" is already taken by a past member. Please choose a different name.', 'warning')
+        flash(f'Staff name "{name}" is already taken by an active member.', 'warning')
         return redirect(url_for('staff_list'))
 
     conn.execute('UPDATE staff SET name = ? WHERE id = ?', (name, id))
